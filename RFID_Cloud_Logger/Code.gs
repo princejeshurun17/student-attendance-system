@@ -422,43 +422,41 @@ function generateMockData() {
     return;
   }
 
-  // === STUDENT REGISTRY ===
-  var students = [
-    ["A1B2C3D4", "Ahmad Rizal",      "21001001", "CS301-A"],
-    ["E5F6A7B8", "Siti Nurhaliza",   "21001002", "CS301-A"],
-    ["C9D0E1F2", "Lim Wei Jie",      "21001003", "CS301-A"],
-    ["12345678", "Priya Sharma",      "21001004", "CS301-B"],
-    ["AABBCCDD", "Muhammad Aiman",    "21001005", "CS301-B"],
-    ["11223344", "Tan Mei Ling",      "21001006", "CS301-B"],
-    ["55667788", "Raj Kumar",         "21001007", "CS302-A"],
-    ["99AABB00", "Nurul Izzah",       "21001008", "CS302-A"],
-    ["DDEEFF11", "Jason Ong",         "21001009", "CS302-A"],
-    ["22334455", "Fatimah Zahra",     "21001010", "CS302-B"],
-    ["66778899", "David Lee",         "21001011", "CS302-B"],
-    ["AABB1122", "Aisyah Rahman",     "21001012", "CS302-B"],
-    ["CCDD3344", "Kevin Tan",         "21001013", "CS303-A"],
-    ["EEFF5566", "Sarah Abdullah",    "21001014", "CS303-A"],
-    ["77889900", "Chen Wei",          "21001015", "CS303-A"]
-  ];
+  // === 1. GENERATE STUDENTS (100 students) ===
+  var firstNames = ["Ahmad", "Siti", "Lim", "Priya", "Muhammad", "Tan", "Raj", "Nurul", "Jason", "Fatimah", "David", "Aisyah", "Kevin", "Sarah", "Chen", "Wei", "Mei", "John", "Kumar", "Lee"];
+  var lastNames = ["Rizal", "Nurhaliza", "Wei Jie", "Sharma", "Aiman", "Mei Ling", "Kumar", "Izzah", "Ong", "Zahra", "Lee", "Rahman", "Tan", "Abdullah", "Wei", "Yiong", "Ling", "Doe", "Singh", "Chin"];
+  var classes = ["CS301-A", "CS301-B", "CS302-A", "CS302-B", "CS303-A", "CS303-B", "CS304-A", "CS304-B"];
+  
+  var students = [];
+  for (var i = 0; i < 100; i++) {
+    var uid = Math.floor(Math.random() * 0xFFFFFFFF).toString(16).toUpperCase();
+    while (uid.length < 8) uid = "0" + uid;
+    
+    var fname = firstNames[Math.floor(Math.random() * firstNames.length)];
+    var lname = lastNames[Math.floor(Math.random() * lastNames.length)];
+    var sid = "2100" + (1000 + i);
+    var cls = classes[Math.floor(Math.random() * classes.length)];
+    
+    students.push([uid, fname + " " + lname, sid, cls]);
+  }
 
-  // Clear existing registry data (keep header)
+  // Clear & Write Registry
   if (regSheet.getLastRow() > 1) {
     regSheet.getRange(2, 1, regSheet.getLastRow() - 1, 4).clear();
   }
   regSheet.getRange(2, 1, students.length, 4).setValues(students);
 
-  // === ATTENDANCE LOG ===
-  // Generate 21 days of data (3 weeks, weekdays only)
+  // === 2. GENERATE ATTENDANCE LOGS (~3000 records) ===
   var rows = [];
   var startDate = new Date();
-  startDate.setDate(startDate.getDate() - 25); // Start 25 days ago
-
-  // Attendance probability per student (some students attend more than others)
-  var attendanceRate = [0.95, 0.90, 0.85, 0.80, 0.75, 0.90, 0.70, 0.85, 0.60, 0.95, 0.50, 0.88, 0.78, 0.92, 0.65];
+  startDate.setDate(startDate.getDate() - 30); // Last 30 days
 
   var baseRSSI = -55;
   var baseHeap = 200000;
   var scanCounter = 0;
+
+  // varied attendance rates
+  var attendanceRates = students.map(function() { return 0.6 + Math.random() * 0.35; }); // 60% to 95%
 
   for (var day = 0; day < 30; day++) {
     var currentDate = new Date(startDate);
@@ -471,34 +469,38 @@ function generateMockData() {
     var dateStr = Utilities.formatDate(currentDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
 
     for (var s = 0; s < students.length; s++) {
-      // Decide if student attends today
-      if (Math.random() > attendanceRate[s]) continue;
+      // Does student attend today?
+      if (Math.random() > attendanceRates[s]) continue;
 
       scanCounter++;
 
-      // Random arrival time: 7:30 AM to 9:15 AM (most between 8:00-8:30)
-      var hour = 8;
-      var minute = Math.floor(Math.random() * 60);
-      var arrivalRand = Math.random();
-      if (arrivalRand < 0.15) {
-        hour = 7; minute = 30 + Math.floor(Math.random() * 30); // 7:30-7:59
-      } else if (arrivalRand < 0.75) {
-        hour = 8; minute = Math.floor(Math.random() * 30);       // 8:00-8:29
-      } else if (arrivalRand < 0.90) {
-        hour = 8; minute = 30 + Math.floor(Math.random() * 30); // 8:30-8:59
-      } else {
-        hour = 9; minute = Math.floor(Math.random() * 15);       // 9:00-9:14
-      }
+      // Realistic Arrival Time Distribution (Bell curve-ish)
+      // Target: 8:00 AM. 
+      // 10% very early (7:30-7:50)
+      // 40% early (7:50-8:00)
+      // 30% on time (8:00-8:10)
+      // 15% late (8:10-8:30)
+      // 5% very late (8:30-9:30)
+      
+      var h, m;
+      var r = Math.random();
+      if (r < 0.10) { h=7; m=30 + Math.floor(Math.random()*20); }       // 7:30 - 7:49
+      else if (r < 0.50) { h=7; m=50 + Math.floor(Math.random()*10); }  // 7:50 - 7:59
+      else if (r < 0.80) { h=8; m=0 + Math.floor(Math.random()*10); }   // 8:00 - 8:09
+      else if (r < 0.95) { h=8; m=10 + Math.floor(Math.random()*20); }  // 8:10 - 8:29
+      else { h=8; m=30 + Math.floor(Math.random()*60); }                // 8:30 - 9:30 (inc. 9am)
 
+      if (m >= 60) { h++; m -= 60; }
+      
       var timestamp = new Date(currentDate);
-      timestamp.setHours(hour, minute, Math.floor(Math.random() * 60));
+      timestamp.setHours(h, m, Math.floor(Math.random() * 60));
 
       var timeStr = Utilities.formatDate(timestamp, Session.getScriptTimeZone(), "HH:mm:ss");
 
-      // Device metrics with slight variation
-      var rssi = baseRSSI + Math.floor(Math.random() * 20 - 10);    // -65 to -45
-      var uptime = 3600 + scanCounter * 5 + Math.floor(Math.random() * 100);
-      var freeHeap = baseHeap - Math.floor(Math.random() * 30000);   // 170k-200k
+      // Metrics
+      var rssi = baseRSSI + Math.floor(Math.random() * 30 - 15);    // -70 to -40
+      var uptime = 3600 + scanCounter * 2 + Math.floor(Math.random() * 500);
+      var freeHeap = baseHeap - Math.floor(Math.random() * 40000);
 
       rows.push([
         timestamp,
@@ -514,18 +516,20 @@ function generateMockData() {
     }
   }
 
-  // Sort by timestamp
+  // Sort chronologically
   rows.sort(function(a, b) { return a[0] - b[0]; });
 
-  // Clear existing log data (keep header)
+  // Clear & Write Log
   if (logSheet.getLastRow() > 1) {
     logSheet.getRange(2, 1, logSheet.getLastRow() - 1, 9).clear();
   }
-
-  // Write all at once (much faster than appendRow in a loop)
-  if (rows.length > 0) {
-    logSheet.getRange(2, 1, rows.length, 9).setValues(rows);
+  
+  // Write in chunks to avoid timeout if array is huge
+  var chunkSize = 500;
+  for (var i = 0; i < rows.length; i += chunkSize) {
+    var chunk = rows.slice(i, i + chunkSize);
+    logSheet.getRange(2 + i, 1, chunk.length, 9).setValues(chunk);
   }
 
-  Logger.log("Mock data generated: " + students.length + " students, " + rows.length + " attendance records across ~3 weeks.");
+  Logger.log("Generated: 100 students, " + rows.length + " attendance records.");
 }
