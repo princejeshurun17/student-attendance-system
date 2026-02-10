@@ -93,6 +93,9 @@ def load_data():
 reg_df, logs_df = load_data()
 
 # Merge Name/Class into Logs for easier analysis
+if "Name" in logs_df.columns:
+    logs_df = logs_df.drop(columns=["Name"])
+    
 full_df = logs_df.merge(reg_df, on="UID", how="left")
 full_df["Name"] = full_df["Name"].fillna("Unknown")
 full_df["Class/Section"] = full_df["Class/Section"].fillna("Unregistered")
