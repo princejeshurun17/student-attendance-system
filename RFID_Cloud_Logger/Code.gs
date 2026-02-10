@@ -146,11 +146,19 @@ function setupDashboard() {
     return;
   }
 
-  // Create or clear Dashboard sheet
+  // --- Read all attendance data ---
+  var lastRow = logSheet.getLastRow();
+  if (lastRow < 2) {
+    Logger.log("No attendance data found. Generate mock data first.");
+    return;
+  }
+  var allData = logSheet.getRange(2, 1, lastRow - 1, 9).getValues();
+  // Columns: 0=Timestamp, 1=Date, 2=Time, 3=UID, 4=Name, 5=RSSI, 6=Uptime, 7=Scan#, 8=FreeHeap
+
+  // --- Create or clear Dashboard ---
   var dash = ss.getSheetByName("Dashboard");
   if (dash) {
     dash.clear();
-    // Remove existing charts
     var existingCharts = dash.getCharts();
     for (var i = 0; i < existingCharts.length; i++) {
       dash.removeChart(existingCharts[i]);
@@ -159,138 +167,247 @@ function setupDashboard() {
     dash = ss.insertSheet("Dashboard");
   }
 
-  // ==============================
-  // SECTION 1: Summary Scorecards
-  // ==============================
+  // Widen columns
+  dash.setColumnWidth(1, 180);
+  dash.setColumnWidth(2, 120);
+  dash.setColumnWidth(3, 120);
+  dash.setColumnWidth(4, 120);
+  dash.setColumnWidth(5, 120);
+  dash.setColumnWidth(6, 120);
+
+  // =========================================
+  //  ROW 1: Title
+  // =========================================
   dash.getRange("A1").setValue("📊 ATTENDANCE DASHBOARD").setFontSize(16).setFontWeight("bold");
-  dash.getRange("A1:F1").merge();
+  dash.getRange("A2").setValue("Last refreshed: " + new Date().toString()).setFontColor("#888888");
 
-  // Labels (Row 3)
-  var labels = ["Total Scans", "Unique Students", "Today's Check-ins", "Last Scan Time", "Avg WiFi RSSI"];
-  dash.getRange(3, 1, 1, labels.length).setValues([labels]).setFontWeight("bold").setBackground("#4285F4").setFontColor("white");
+  // =========================================
+  //  ROW 4-5: Summary Scorecards
+  // =========================================
+  var totalScans = allData.length;
+  var uniqueUIDs = {};
+  var todayStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  var todayCount = 0;
+  var lastScanTime = allData[allData.length - 1][0];
+  var rssiSum = 0;
+  var rssiCount = 0;
 
-  // Formulas (Row 4)
-  var formulas = [
-    '=COUNTA(AttendanceLog!D:D)-1',
-    '=IFERROR(COUNTUNIQUE(AttendanceLog!D2:D), 0)',
-    '=COUNTIFS(AttendanceLog!B:B, TEXT(TODAY(),"yyyy-mm-dd"))',
-    '=IFERROR(INDEX(AttendanceLog!A:A, COUNTA(AttendanceLog!A:A)), "No data")',
-    '=IFERROR(AVERAGE(AttendanceLog!F2:F), "N/A")'
-  ];
-  for (var i = 0; i < formulas.length; i++) {
-    dash.getRange(4, i + 1).setFormula(formulas[i]).setFontSize(14).setFontWeight("bold");
+  for (var i = 0; i < allData.length; i++) {
+    uniqueUIDs[allData[i][3]] = true;
+    if (String(allData[i][1]) === todayStr) todayCount++;
+    var r = Number(allData[i][5]);
+    if (!isNaN(r) && r !== 0) { rssiSum += r; rssiCount++; }
+  }
+  var uniqueCount = Object.keys(uniqueUIDs).length;
+  var avgRSSI = rssiCount > 0 ? Math.round(rssiSum / rssiCount) : "N/A";
+
+  var labels = ["Total Scans", "Unique Students", "Today's Check-ins", "Last Scan", "Avg RSSI (dBm)"];
+  var values = [totalScans, uniqueCount, todayCount, lastScanTime, avgRSSI];
+
+  dash.getRange(4, 1, 1, 5).setValues([labels]).setFontWeight("bold").setBackground("#4285F4").setFontColor("white");
+  dash.getRange(5, 1, 1, 5).setValues([values]).setFontSize(14).setFontWeight("bold");
+  dash.getRange(5, 4).setNumberFormat("yyyy-MM-dd HH:mm");
+
+  // =========================================
+  //  DATA TABLE 1: Daily Attendance (Col A-B, Row 8+)
+  // =========================================
+  var dailyCounts = {};
+  for (var i = 0; i < allData.length; i++) {
+    var d = String(allData[i][1]);
+    dailyCounts[d] = (dailyCounts[d] || 0) + 1;
+  }
+  var dailyKeys = Object.keys(dailyCounts).sort();
+  var dailyTable = [["Date", "Check-ins"]];
+  for (var i = 0; i < dailyKeys.length; i++) {
+    dailyTable.push([dailyKeys[i], dailyCounts[dailyKeys[i]]]);
   }
 
-  // Column widths
-  dash.setColumnWidth(1, 150);
-  dash.setColumnWidth(2, 150);
-  dash.setColumnWidth(3, 150);
-  dash.setColumnWidth(4, 200);
-  dash.setColumnWidth(5, 150);
+  dash.getRange("A7").setValue("📈 Daily Attendance").setFontWeight("bold");
+  dash.getRange(8, 1, dailyTable.length, 2).setValues(dailyTable);
+  dash.getRange(8, 1, 1, 2).setFontWeight("bold").setBackground("#E8EAED");
 
-  // ==============================
-  // SECTION 2: Attendance by Date
-  // ==============================
-  // Helper table: Row 7+
-  dash.getRange("A7").setValue("📈 Daily Attendance (auto-generated from data)").setFontWeight("bold");
-  dash.getRange("A8").setValue("Date").setFontWeight("bold").setBackground("#E8EAED");
-  dash.getRange("B8").setValue("Count").setFontWeight("bold").setBackground("#E8EAED");
-  dash.getRange("A9").setFormula('=IFERROR(SORT(UNIQUE(AttendanceLog!B2:B)), "")');
-  // Fill count formulas for up to 100 rows
-  for (var r = 9; r <= 108; r++) {
-    dash.getRange(r, 2).setFormula('=IF(A' + r + '="","",COUNTIF(AttendanceLog!B:B,A' + r + '))');
-  }
+  var dailyEndRow = 8 + dailyTable.length - 1;
 
-  // Chart 1: Daily Attendance Line
+  // CHART 1: Daily Attendance Line
   var chart1 = dash.newChart()
     .setChartType(Charts.ChartType.LINE)
-    .addRange(dash.getRange("A8:B108"))
-    .setPosition(7, 4, 0, 0) // Row 7, Col D
+    .addRange(dash.getRange(8, 1, dailyTable.length, 2))
+    .setNumHeaders(1)
+    .setOption("useFirstColumnAsDomain", true)
+    .setPosition(7, 4, 0, 0)
     .setOption("title", "Daily Attendance Trend")
-    .setOption("hAxis.title", "Date")
-    .setOption("vAxis.title", "Check-ins")
-    .setOption("legend.position", "none")
+    .setOption("hAxis", {title: "Date", slantedText: true, slantedTextAngle: 45})
+    .setOption("vAxis", {title: "Check-ins", minValue: 0})
+    .setOption("legend", {position: "none"})
     .setOption("colors", ["#4285F4"])
-    .setOption("width", 500)
-    .setOption("height", 300)
+    .setOption("curveType", "function")
+    .setOption("pointSize", 5)
+    .setOption("width", 600)
+    .setOption("height", 350)
     .build();
   dash.insertChart(chart1);
 
-  // ==============================
-  // SECTION 3: Top Attendees
-  // ==============================
-  dash.getRange("A25").setValue("🏆 Top Attendees").setFontWeight("bold");
-  dash.getRange("A26").setValue("Name").setFontWeight("bold").setBackground("#E8EAED");
-  dash.getRange("B26").setValue("Scans").setFontWeight("bold").setBackground("#E8EAED");
-  // QUERY to count by name, sorted desc
-  dash.getRange("A27").setFormula(
-    '=IFERROR(QUERY(AttendanceLog!E2:E, "SELECT E, COUNT(E) WHERE E IS NOT NULL GROUP BY E ORDER BY COUNT(E) DESC LABEL COUNT(E) \'Scans\'"), "")'
-  );
+  // =========================================
+  //  DATA TABLE 2: Top Attendees (Col A-B, Row dailyEndRow+3)
+  // =========================================
+  var nameTable2Start = dailyEndRow + 3;
 
-  // Chart 2: Top Attendees Bar
+  var nameCounts = {};
+  for (var i = 0; i < allData.length; i++) {
+    var n = String(allData[i][4]);
+    if (n && n !== "Unknown") nameCounts[n] = (nameCounts[n] || 0) + 1;
+  }
+  // Sort by count desc
+  var nameKeys = Object.keys(nameCounts).sort(function(a, b) { return nameCounts[b] - nameCounts[a]; });
+  var nameTableData = [["Student Name", "Total Scans"]];
+  for (var i = 0; i < nameKeys.length; i++) {
+    nameTableData.push([nameKeys[i], nameCounts[nameKeys[i]]]);
+  }
+
+  dash.getRange(nameTable2Start - 1, 1).setValue("🏆 Top Attendees").setFontWeight("bold");
+  dash.getRange(nameTable2Start, 1, nameTableData.length, 2).setValues(nameTableData);
+  dash.getRange(nameTable2Start, 1, 1, 2).setFontWeight("bold").setBackground("#E8EAED");
+
+  // CHART 2: Top Attendees Bar
   var chart2 = dash.newChart()
     .setChartType(Charts.ChartType.BAR)
-    .addRange(dash.getRange("A26:B46"))
-    .setPosition(25, 4, 0, 0)
-    .setOption("title", "Scans by Student")
-    .setOption("legend.position", "none")
+    .addRange(dash.getRange(nameTable2Start, 1, nameTableData.length, 2))
+    .setNumHeaders(1)
+    .setOption("useFirstColumnAsDomain", true)
+    .setPosition(nameTable2Start - 1, 4, 0, 0)
+    .setOption("title", "Scans per Student")
+    .setOption("hAxis", {title: "Total Scans", minValue: 0})
+    .setOption("vAxis", {title: ""})
+    .setOption("legend", {position: "none"})
     .setOption("colors", ["#34A853"])
-    .setOption("width", 500)
-    .setOption("height", 300)
+    .setOption("width", 600)
+    .setOption("height", 400)
     .build();
   dash.insertChart(chart2);
 
-  // ==============================
-  // SECTION 4: Hourly Distribution
-  // ==============================
-  dash.getRange("A43").setValue("🕐 Hourly Check-in Distribution").setFontWeight("bold");
-  dash.getRange("A44").setValue("Hour").setFontWeight("bold").setBackground("#E8EAED");
-  dash.getRange("B44").setValue("Count").setFontWeight("bold").setBackground("#E8EAED");
-  // Hours 0-23
-  for (var h = 0; h <= 23; h++) {
-    dash.getRange(45 + h, 1).setValue(h + ":00");
-    dash.getRange(45 + h, 2).setFormula(
-      '=COUNTIF(ARRAYFORMULA(IF(AttendanceLog!C2:C<>"",HOUR(AttendanceLog!C2:C),"")), ' + h + ')'
-    );
+  // =========================================
+  //  DATA TABLE 3: Hourly Distribution (Col D-E, Row nameTable2Start + nameTableData.length + 3)
+  // =========================================
+  var hourlyStart = nameTable2Start + nameTableData.length + 3;
+
+  var hourCounts = {};
+  for (var h = 0; h < 24; h++) hourCounts[h] = 0;
+  for (var i = 0; i < allData.length; i++) {
+    var ts = allData[i][0];
+    if (ts instanceof Date) {
+      hourCounts[ts.getHours()] = (hourCounts[ts.getHours()] || 0) + 1;
+    }
+  }
+  var hourlyTableData = [["Hour", "Check-ins"]];
+  for (var h = 0; h < 24; h++) {
+    var label = (h < 10 ? "0" : "") + h + ":00";
+    hourlyTableData.push([label, hourCounts[h]]);
   }
 
-  // Chart 3: Hourly Column
+  dash.getRange(hourlyStart - 1, 1).setValue("🕐 Hourly Check-in Distribution").setFontWeight("bold");
+  dash.getRange(hourlyStart, 1, hourlyTableData.length, 2).setValues(hourlyTableData);
+  dash.getRange(hourlyStart, 1, 1, 2).setFontWeight("bold").setBackground("#E8EAED");
+
+  // CHART 3: Hourly Column
   var chart3 = dash.newChart()
     .setChartType(Charts.ChartType.COLUMN)
-    .addRange(dash.getRange("A44:B68"))
-    .setPosition(43, 4, 0, 0)
+    .addRange(dash.getRange(hourlyStart, 1, hourlyTableData.length, 2))
+    .setNumHeaders(1)
+    .setOption("useFirstColumnAsDomain", true)
+    .setPosition(hourlyStart - 1, 4, 0, 0)
     .setOption("title", "Check-ins by Hour of Day")
-    .setOption("hAxis.title", "Hour")
-    .setOption("vAxis.title", "Count")
-    .setOption("legend.position", "none")
+    .setOption("hAxis", {title: "Hour"})
+    .setOption("vAxis", {title: "Count", minValue: 0})
+    .setOption("legend", {position: "none"})
     .setOption("colors", ["#FBBC04"])
-    .setOption("width", 500)
-    .setOption("height", 300)
+    .setOption("width", 600)
+    .setOption("height", 350)
     .build();
   dash.insertChart(chart3);
 
-  // ==============================
-  // SECTION 5: Device Health
-  // ==============================
-  dash.getRange("A70").setValue("📡 Device WiFi Signal").setFontWeight("bold");
+  // =========================================
+  //  DATA TABLE 4: Attendance by Class (Col A-B, after hourly)
+  // =========================================
+  var classStart = hourlyStart + hourlyTableData.length + 3;
 
-  // Chart 4: WiFi RSSI over time
+  // Need Registry for class info
+  var regSheet = ss.getSheetByName("StudentRegistry");
+  var uidToClass = {};
+  if (regSheet && regSheet.getLastRow() > 1) {
+    var regData = regSheet.getRange(2, 1, regSheet.getLastRow() - 1, 4).getValues();
+    for (var i = 0; i < regData.length; i++) {
+      uidToClass[String(regData[i][0]).toUpperCase()] = String(regData[i][3]); // UID -> Class
+    }
+  }
+  var classCounts = {};
+  for (var i = 0; i < allData.length; i++) {
+    var cls = uidToClass[String(allData[i][3]).toUpperCase()] || "Unregistered";
+    classCounts[cls] = (classCounts[cls] || 0) + 1;
+  }
+  var classKeys = Object.keys(classCounts).sort();
+  var classTableData = [["Class/Section", "Total Scans"]];
+  for (var i = 0; i < classKeys.length; i++) {
+    classTableData.push([classKeys[i], classCounts[classKeys[i]]]);
+  }
+
+  dash.getRange(classStart - 1, 1).setValue("🏫 Attendance by Class").setFontWeight("bold");
+  dash.getRange(classStart, 1, classTableData.length, 2).setValues(classTableData);
+  dash.getRange(classStart, 1, 1, 2).setFontWeight("bold").setBackground("#E8EAED");
+
+  // CHART 4: Attendance by Class Pie
   var chart4 = dash.newChart()
-    .setChartType(Charts.ChartType.LINE)
-    .addRange(logSheet.getRange("A1:A"))  // Timestamp
-    .addRange(logSheet.getRange("F1:F"))  // RSSI
-    .setPosition(71, 1, 0, 0)
-    .setOption("title", "WiFi Signal Strength (RSSI) Over Time")
-    .setOption("hAxis.title", "Time")
-    .setOption("vAxis.title", "RSSI (dBm)")
-    .setOption("legend.position", "none")
-    .setOption("colors", ["#EA4335"])
-    .setOption("width", 800)
-    .setOption("height", 300)
+    .setChartType(Charts.ChartType.PIE)
+    .addRange(dash.getRange(classStart, 1, classTableData.length, 2))
+    .setNumHeaders(1)
+    .setOption("useFirstColumnAsDomain", true)
+    .setPosition(classStart - 1, 4, 0, 0)
+    .setOption("title", "Scans by Class/Section")
+    .setOption("pieHole", 0.4)
+    .setOption("colors", ["#4285F4", "#34A853", "#FBBC04", "#EA4335", "#9C27B0", "#00BCD4"])
+    .setOption("width", 500)
+    .setOption("height", 350)
     .build();
   dash.insertChart(chart4);
 
-  Logger.log("Dashboard created with 4 charts and summary scorecards.");
+  // =========================================
+  //  DATA TABLE 5: WiFi RSSI over time (Col A-B, after class)
+  // =========================================
+  var rssiStart = classStart + classTableData.length + 3;
+
+  // Sample every Nth row to avoid huge chart data
+  var sampleInterval = Math.max(1, Math.floor(allData.length / 100));
+  var rssiTableData = [["Timestamp", "RSSI (dBm)"]];
+  for (var i = 0; i < allData.length; i += sampleInterval) {
+    var ts = allData[i][0];
+    var rssiVal = Number(allData[i][5]);
+    if (ts instanceof Date && !isNaN(rssiVal)) {
+      rssiTableData.push([Utilities.formatDate(ts, Session.getScriptTimeZone(), "MM/dd HH:mm"), rssiVal]);
+    }
+  }
+
+  dash.getRange(rssiStart - 1, 1).setValue("📡 Device WiFi Signal Over Time").setFontWeight("bold");
+  dash.getRange(rssiStart, 1, rssiTableData.length, 2).setValues(rssiTableData);
+  dash.getRange(rssiStart, 1, 1, 2).setFontWeight("bold").setBackground("#E8EAED");
+
+  // CHART 5: RSSI Line
+  var chart5 = dash.newChart()
+    .setChartType(Charts.ChartType.LINE)
+    .addRange(dash.getRange(rssiStart, 1, rssiTableData.length, 2))
+    .setNumHeaders(1)
+    .setOption("useFirstColumnAsDomain", true)
+    .setPosition(rssiStart - 1, 4, 0, 0)
+    .setOption("title", "WiFi Signal Strength (RSSI)")
+    .setOption("hAxis", {title: "Time", slantedText: true, slantedTextAngle: 45})
+    .setOption("vAxis", {title: "dBm"})
+    .setOption("legend", {position: "none"})
+    .setOption("colors", ["#EA4335"])
+    .setOption("pointSize", 3)
+    .setOption("width", 600)
+    .setOption("height", 300)
+    .build();
+  dash.insertChart(chart5);
+
+  Logger.log("Dashboard created: 5 scorecards + 5 charts. " + totalScans + " records processed.");
 }
 
 // ---- Mock Data Generator (run manually from editor) ----
