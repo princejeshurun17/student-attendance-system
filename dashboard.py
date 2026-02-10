@@ -13,10 +13,10 @@ st.set_page_config(page_title="RFID Attendance Dashboard", layout="wide", page_i
 # IMPORTANT: REPLACE THESE URLs WITH YOUR OWN PUBLISHED CSV LINKS
 # 1. In Google Sheet: "File" > "Share" > "Publish to web"
 # 2. Select "StudentRegistry" > "Comma-separated values (.csv)" > Publish > Copy Link
-REGISTRY_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT...._REPLACE_ME_..../pub?gid=123456&single=true&output=csv"
+REGISTRY_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-BfoVhIFuUW3hYbN-6BcW0QBygB761GU9lle7BmHC9CztbAp9rkM5LJ6ZVJkrbY-3UIizYbW9krds/pub?gid=868486306&single=true&output=csv"
 
 # 3. Select "AttendanceLog" > "Comma-separated values (.csv)" > Publish > Copy Link
-LOG_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT...._REPLACE_ME_..../pub?gid=987654&single=true&output=csv"
+LOG_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-BfoVhIFuUW3hYbN-6BcW0QBygB761GU9lle7BmHC9CztbAp9rkM5LJ6ZVJkrbY-3UIizYbW9krds/pub?gid=1791813027&single=true&output=csv"
 # --------------------------------------------------------
 
 # Fallback mock data if URLs are not set
@@ -71,9 +71,18 @@ def load_data():
              # handle string time conversion
              logs_df["Time"] = pd.to_datetime(logs_df["Time"].astype(str), format='%H:%M:%S').dt.time
 
+        # Validate Columns
+        required_reg = ["UID", "Name"]
+        if not all(col in reg_df.columns for col in required_reg):
+            raise ValueError(f"Registry CSV missing columns: {required_reg}. Found: {list(reg_df.columns)}")
+            
+        required_log = ["UID"]
+        if not all(col in logs_df.columns for col in required_log):
+             raise ValueError(f"attendance CSV missing columns: {required_log}. Found: {list(logs_df.columns)}")
+
         return reg_df, logs_df
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        st.error(f"⚠️ Error loading data. Did you 'Publish to Web' as CSV? \n\nDetails: {e}")
         return load_mock_data()
 
 # ==========================================
