@@ -7,21 +7,28 @@ from datetime import datetime, time, timedelta
 # ==========================================
 # CONFIGURATION
 # ==========================================
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# ==========================================
+# CONFIGURATION
+# ==========================================
 st.set_page_config(page_title="RFID Attendance Dashboard", layout="wide", page_icon="🎓")
 
-# --------------------------------------------------------
-# IMPORTANT: REPLACE THESE URLs WITH YOUR OWN PUBLISHED CSV LINKS
-# 1. In Google Sheet: "File" > "Share" > "Publish to web"
-# 2. Select "StudentRegistry" > "Comma-separated values (.csv)" > Publish > Copy Link
-REGISTRY_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-BfoVhIFuUW3hYbN-6BcW0QBygB761GU9lle7BmHC9CztbAp9rkM5LJ6ZVJkrbY-3UIizYbW9krds/pub?gid=868486306&single=true&output=csv"
-
-# 3. Select "AttendanceLog" > "Comma-separated values (.csv)" > Publish > Copy Link
-LOG_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-BfoVhIFuUW3hYbN-6BcW0QBygB761GU9lle7BmHC9CztbAp9rkM5LJ6ZVJkrbY-3UIizYbW9krds/pub?gid=1791813027&single=true&output=csv"
-# --------------------------------------------------------
+# Load config from environment variables
+REGISTRY_URL = os.getenv("REGISTRY_URL", "")
+LOG_URL = os.getenv("LOG_URL", "")
 
 # Fallback mock data if URLs are not set
 def load_mock_data():
-    st.warning("Using MOCK data. Please update `REGISTRY_URL` and `LOG_URL` in `dashboard.py` with your published sheet links.")
+    if not REGISTRY_URL or not LOG_URL:
+        st.warning("⚠️ Configuration Missing: Create a `.env` file with `REGISTRY_URL` and `LOG_URL`. (See `.env.example`)")
+        st.info("Using MOCK data for demonstration.")
+    else:
+        st.warning("Using MOCK data (Loading error occurred).")
     
     # Mock Registry
     reg_df = pd.DataFrame({

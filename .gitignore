@@ -1,0 +1,14 @@
+# Environment variables
+.env
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+env/
+.streamlit/
+
+# Arduino
+build/
+**/secrets.h

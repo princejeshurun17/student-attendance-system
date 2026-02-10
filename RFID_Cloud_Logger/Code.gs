@@ -12,8 +12,13 @@
 // 4. Copy the Web App URL into your ESP32 code
 // 5. Manually add students to the "StudentRegistry" sheet
 
-// ---- PASTE YOUR GOOGLE SHEET URL BELOW ----
-var SHEET_URL = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID_HERE/edit";
+// ---- CONFIGURATION: Set 'SHEET_URL' in Project Settings > Script Properties ----
+var SHEET_URL = PropertiesService.getScriptProperties().getProperty("SHEET_URL");
+
+if (!SHEET_URL) {
+  // Fallback for first run / error message
+  Logger.log("⚠️ ERROR: 'SHEET_URL' not found in Script Properties.");
+}
 
 function getSpreadsheet() {
   return SpreadsheetApp.openByUrl(SHEET_URL);

@@ -21,15 +21,13 @@
 #include <WiFiClientSecure.h>
 #include <Wire.h>
 
-
 // --- Configuration ---
-const char *ssid = "VinHome-5G_2.4G_EXT";
-const char *password = "Vin@2124";
+#include "secrets.h"
 
-// Paste your Google Apps Script Web App URL here
-const char *scriptURL = "https://script.google.com/macros/s/"
-                        "AKfycbxGFIn09Aak7TBdmItsxWTC9Bmzfd5S1IZzTTw8w_"
-                        "ASi3QLp9kfQfhGz2oYmsm7xrHvSA/exec";
+// Credentials from secrets.h
+const char *ssid = WIFI_SSID;
+const char *password = WIFI_PASSWORD;
+const char *scriptURL = WEB_APP_URL;
 
 // --- Pins ---
 #define BUZZER_PIN 4
