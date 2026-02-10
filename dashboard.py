@@ -191,7 +191,12 @@ with st.expander("📡 Device Health Diagnostics"):
     h1, h2 = st.columns(2)
     # Resample for less noise if lots of data
     if len(filtered_df) > 200:
-        resampled = filtered_df.set_index("Timestamp").resample("1H").mean().reset_index()
+        # Select only numeric columns for mean aggregation
+        numeric_cols = ["WiFi RSSI"]
+        if "Free Heap" in filtered_df.columns:
+            numeric_cols.append("Free Heap")
+            
+        resampled = filtered_df.set_index("Timestamp")[numeric_cols].resample("1H").mean().reset_index()
     else:
         resampled = filtered_df
         
