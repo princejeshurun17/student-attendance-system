@@ -71,6 +71,12 @@ def load_data():
              # handle string time conversion
              logs_df["Time"] = pd.to_datetime(logs_df["Time"].astype(str), format='%H:%M:%S').dt.time
 
+        # Force numeric metrics (coercing errors to NaN)
+        if "WiFi RSSI" in logs_df.columns:
+            logs_df["WiFi RSSI"] = pd.to_numeric(logs_df["WiFi RSSI"], errors='coerce')
+        if "Free Heap" in logs_df.columns:
+             logs_df["Free Heap"] = pd.to_numeric(logs_df["Free Heap"], errors='coerce')
+
         # Validate Columns
         required_reg = ["UID", "Name"]
         if not all(col in reg_df.columns for col in required_reg):
@@ -84,6 +90,14 @@ def load_data():
     except Exception as e:
         st.error(f"⚠️ Error loading data. Did you 'Publish to Web' as CSV? \n\nDetails: {e}")
         return load_mock_data()
+
+# Helper for Signal Quality
+def get_signal_quality(rssi):
+    if pd.isna(rssi): return "Unknown"
+    if rssi >= -55: return "Excellent 🟢"
+    if rssi >= -65: return "Good 🟡"
+    if rssi >= -75: return "Fair 🟠"
+    return "Poor 🔴"
 
 # ==========================================
 # MAIN APP
@@ -130,6 +144,7 @@ col1, col2, col3, col4 = st.columns(4)
 total_checks = len(filtered_df)
 unique_students = filtered_df["UID"].nunique()
 avg_rssi = filtered_df["WiFi RSSI"].mean()
+signal_quality = get_signal_quality(avg_rssi)
 
 # Late Arrivals (after 8:30 AM)
 cutoff_time = time(8, 30, 0)
@@ -138,7 +153,7 @@ late_count = len(filtered_df[filtered_df["Time"] > cutoff_time])
 col1.metric("Total Check-ins", total_checks)
 col2.metric("Unique Students", unique_students)
 col3.metric("Late Arrivals (>8:30)", late_count, delta=-late_count, delta_color="inverse")
-col4.metric("Avg Signal (RSSI)", f"{avg_rssi:.1f} dBm")
+col4.metric("Avg Signal", f"{signal_quality} ({avg_rssi:.0f} dBm)")
 
 st.markdown("---")
 
@@ -187,7 +202,7 @@ late_df = filtered_df[filtered_df["Time"] > cutoff_time][["Date", "Time", "Name"
 st.dataframe(late_df, use_container_width=True)
 
 # Row 4: Device Health
-with st.expander("📡 Device Health Diagnostics"):
+with st.expander("📡 Device Health Diagnostics", expanded=True):
     h1, h2 = st.columns(2)
     # Resample for less noise if lots of data
     if len(filtered_df) > 200:
@@ -196,13 +211,16 @@ with st.expander("📡 Device Health Diagnostics"):
         if "Free Heap" in filtered_df.columns:
             numeric_cols.append("Free Heap")
             
-        resampled = filtered_df.set_index("Timestamp")[numeric_cols].resample("1H").mean().reset_index()
+        # Resample to hourly mean, then drop NaNs to avoid gaps in the line chart
+        resampled = filtered_df.set_index("Timestamp")[numeric_cols].resample("1H").mean().dropna().reset_index()
     else:
         resampled = filtered_df
         
     fig_rssi = px.line(resampled, x="Timestamp", y="WiFi RSSI", title="WiFi Signal Strength Trend")
+    fig_rssi.update_traces(connectgaps=True) # Connect lines across missing data
     h1.plotly_chart(fig_rssi, use_container_width=True)
     
     if "Free Heap" in resampled.columns:
         fig_heap = px.line(resampled, x="Timestamp", y="Free Heap", title="Device Memory (Free Heap)")
+        fig_heap.update_traces(connectgaps=True)
         h2.plotly_chart(fig_heap, use_container_width=True)
