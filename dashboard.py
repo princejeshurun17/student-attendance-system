@@ -172,9 +172,17 @@ with c1:
 
 with c2:
     st.subheader("Busiest Hours")
-    filtered_df["Hour"] = filtered_df["Timestamp"].dt.hour
+    # Use 'Time' column to extract hour (Timestamp might be date-only in CSV)
+    filtered_df["Hour"] = filtered_df["Time"].apply(lambda t: t.hour if pd.notnull(t) else 0)
+    
+    # Ensure all 24 hours are present in the chart
     hourly_counts = filtered_df.groupby("Hour").size().reset_index(name="Count")
-    fig_bar = px.bar(hourly_counts, x="Hour", y="Count", title="Hourly Distribution", color="Count")
+    all_hours = pd.DataFrame({"Hour": range(24)})
+    hourly_counts = all_hours.merge(hourly_counts, on="Hour", how="left").fillna(0)
+    
+    fig_bar = px.bar(hourly_counts, x="Hour", y="Count", title="Hourly Distribution", color="Count",
+                     color_continuous_scale="Blues")
+    fig_bar.update_layout(xaxis=dict(tickmode='linear', tick0=0, dtick=1))
     st.plotly_chart(fig_bar, use_container_width=True)
 
 # Row 2: Student Leaderboard & Class Distribution
